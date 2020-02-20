@@ -1,36 +1,53 @@
 # build command
-#docker build -t face-aware-photo-osd:1.0.0 .
+#docker build -t face-aware-photo-osd:1.0.1 .
 # push command
-#docker image tag face-aware-photo-osd:1.0.0 moononournation/face-aware-photo-osd:1.0.0
-#docker image push moononournation/face-aware-photo-osd:1.0.0
+# docker image tag face-aware-photo-osd:1.0.1 moononournation/face-aware-photo-osd:1.0.1
+# docker image push moononournation/face-aware-photo-osd:1.0.1
+
+#building Multi-Arch Images
+#docker buildx ls
+#docker buildx create --use
+#docker buildx build -t face-aware-photo-osd:1.0.1 --platform linux/arm
+#docker buildx build -t face-aware-photo-osd:1.0.1 --platform linux/arm --push moononournation/face-aware-photo-osd:1.0.1
+
 # run command
-#docker run -it -p 8080:8080 -e TZ=Asia/Hong_Kong -v /path/to/photo960:/usr/src/app/photo960 moononournation/face-aware-photo-osd:1.0.0
+#docker run -it -p 8080:8080 -e TZ=Asia/Hong_Kong -v /path/to/photo:/app/photo moononournation/face-aware-photo-osd:1.0.1
 
-FROM node:8
-
-WORKDIR /usr/src/app
-
-RUN npm i -g npm \
-    && npm install nodemon -g \
-    && apt-get update \
-    && apt-get upgrade -y \
-    && apt-get install -y --no-install-recommends \
-		build-essential \
-        cmake \
-        libopenblas-dev
-
-COPY package*.json ./
-
-RUN npm install \
-    && npm cache clean --force \
-    && apt-get remove -y \
-		    build-essential \
-        cmake \
-    && apt-get autoremove -y \
-    && rm -r /var/lib/apt/lists/*
-
-COPY . .
+FROM node:10-buster-slim
 
 EXPOSE 8080
 
-CMD [ "nodemon", "app.js" ]
+WORKDIR /app
+
+RUN npm i -g npm \
+    && apt-get update \
+    && apt-get upgrade -y
+
+RUN apt-get install -y --no-install-recommends \
+      build-essential \
+      ca-certificates \
+      cmake \
+      git \
+      python
+
+COPY package*.json ./
+
+RUN npm install
+
+RUN npm install -g node-dev
+
+RUN npm cache clean --force \
+    && apt-get remove -y \
+      build-essential \
+      ca-certificates \
+      cmake \
+      git \
+      python \
+    && apt-get autoremove -y \
+    && rm -r /var/lib/apt/lists/*
+
+COPY font ./font/
+
+COPY app.js .
+
+CMD [ "node-dev", "app.js" ]

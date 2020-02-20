@@ -1,38 +1,32 @@
-const sharp = require('sharp');
-const fr = require('face-recognition');
-const fs = require('fs');
-const PImage = require('pureimage');
-const moment = require('moment');
-const http = require('http');
+const FACEDETECTION = require('face-detection');
+const FS = require('fs');
+const HTTP = require('http');
+const MOMENT = require('moment');
+const PUREIMAGE = require('pureimage');
+const SHARP = require('sharp');
+const URL = require('url');
 
-const photoPath = "photo1280/";
-const w = 1280, h = 960;
-const upper_left = { top: 1, bottom: (h / 2), left: 1, right: (w / 2), area: (w * h / 4) }
-const upper_right = { top: 1, bottom: (h / 2), left: (w / 2) + 1, right: w, area: (w * h / 4) }
-const lower_left = { top: (h / 2) + 1, bottom: h, left: 1, right: (w / 2), area: (w * h / 4) }
-const lower_right = { top: (h / 2) + 1, bottom: h, left: (w / 2) + 1, right: w, area: (w * h / 4) }
+const PHOTOPATH = "photo/";
 
 var currentWeather;
 
-function overlap_area(rect1, rect2) {
-  var overlap_rect = {
-    left: Math.max(rect1.left, rect2.left),
-    right: Math.min(rect1.right, rect2.right),
-    top: Math.max(rect1.top, rect2.top),
-    bottom: Math.min(rect1.bottom, rect2.bottom)
+function overlap_area(range, rect) {
+  var overlap_range = {
+    left: Math.max(range.left, rect.x),
+    right: Math.min(range.right, rect.x + rect.width - 1),
+    top: Math.max(range.top, rect.y),
+    bottom: Math.min(range.bottom, rect.y + rect.height - 1)
   }
-  if ((overlap_rect.right > overlap_rect.left) && (overlap_rect.bottom > overlap_rect.top)) {
-    overlap_rect.area = (overlap_rect.right - overlap_rect.left + 1) * (overlap_rect.bottom - overlap_rect.top + 1);
+  if ((overlap_range.right > overlap_range.left) && (overlap_range.bottom > overlap_range.top)) {
+    return (overlap_range.right - overlap_range.left + 1) * (overlap_range.bottom - overlap_range.top + 1);
   } else {
-    overlap_rect = { left: 0, right: 0, top: 0, bottom: 0, area: 0 };
+    return 0;
   }
-
-  return overlap_rect;
 }
 
 function draw_shadow_text(ctx, text, x, y, color) {
   ctx.fillStyle = '#3f3f3f';
-  ctx.fillText(text, x - 2, y - 2);
+  ctx.fillText(text, x - 1, y - 1);
   ctx.fillStyle = '#3f3f3f';
   ctx.fillText(text, x + 4, y + 4);
   ctx.fillStyle = color;
@@ -41,7 +35,7 @@ function draw_shadow_text(ctx, text, x, y, color) {
 
 function update_weather() {
   if ((!currentWeather) || ((Date.now() - currentWeather.last_update) > (10 * 60 * 1000))) {
-    http.get('http://rss.weather.gov.hk/rss/CurrentWeather.xml', (resp) => {
+    HTTP.get('http://rss.weather.gov.hk/rss/CurrentWeather.xml', (resp) => {
       let data = '';
 
       // A chunk of data has been recieved.
@@ -82,105 +76,130 @@ function update_weather() {
   }
 }
 
-/* web server 3002 */
-//create a server object:
-http.createServer(function (req, res) {
-  update_weather();
+async function face_detection(filename, req, res) {
+  const detector = new FACEDETECTION(filename);
+  const IMG = await detector.readImg(); // this will return a cvImgObject
+  const RESULT = await detector.detect(IMG);
+  console.log(RESULT);
 
-  fs.readdir(photoPath, function (err, files) {
-    var filename = photoPath + files[Math.floor(Math.random() * files.length)];
-    const detector = fr.FaceDetector();
+  PUREIMAGE.registerFont('font/FreeSansBold.ttf', 'FreeSansBold').load(() => {
+    PUREIMAGE.decodeJPEGFromStream(FS.createReadStream(filename))
+      .then((frame) => {
+        // console.log(frame);
+        const W = frame.width;
+        const H = frame.height;
+        const UPPERLEFT = { top: 1, bottom: (H / 2), left: 1, right: (W / 2) }
+        const UPPERRIGHT = { top: 1, bottom: (H / 2), left: (W / 2) + 1, right: W }
+        const LOWERLEFT = { top: (H / 2) + 1, bottom: H, left: 1, right: (W / 2) }
+        const LOWERRIGHT = { top: (H / 2) + 1, bottom: H, left: (W / 2) + 1, right: W }
+    
+        var ul_overlap = 0;
+        var ur_overlap = 0;
+        var ll_overlap = 0;
+        var lr_overlap = 0;
+      
+        RESULT.objects.forEach((rect) => {
+          // console.log(rect.width);
+          ul_overlap += overlap_area(UPPERLEFT, rect);
+          ur_overlap += overlap_area(UPPERRIGHT, rect);
+          ll_overlap += overlap_area(LOWERLEFT, rect);
+          lr_overlap += overlap_area(LOWERRIGHT, rect);
+        });
+        var min_overlap = Math.min(Math.min(ul_overlap, ur_overlap), Math.min(ll_overlap, lr_overlap));
+        var display_rect;
+        if (ll_overlap == min_overlap) {
+          display_rect = LOWERLEFT;
+        } else if (lr_overlap == min_overlap) {
+          display_rect = LOWERRIGHT;
+        } else if (ul_overlap == min_overlap) {
+          display_rect = UPPERLEFT;
+        } else {
+          display_rect = UPPERRIGHT;
+        }
+        // console.log(display_rect);
+      
+        var img = PUREIMAGE.make(W, H);
+        var ctx = img.getContext('2d');
 
-    const photo = fr.loadImage(filename);
-    const result = detector.locateFaces(photo);
-    var ul_overlap = 0;
-    var ur_overlap = 0;
-    var ll_overlap = 0;
-    var lr_overlap = 0;
+        // draw frame
+        ctx.drawImage(frame,
+          0, 0, W, H, // source dimensions
+          0, 0, W, H  // destination dimensions
+        );
 
-    result.forEach((value, idx, rect) => {
-      // console.log(value.rect);
-      ul_overlap += overlap_area(upper_left, value.rect).area;
-      ur_overlap += overlap_area(upper_right, value.rect).area;
-      ll_overlap += overlap_area(lower_left, value.rect).area;
-      lr_overlap += overlap_area(lower_right, value.rect).area;
-    });
-    var min_overlap = Math.min(Math.min(ul_overlap, ur_overlap), Math.min(ll_overlap, lr_overlap));
-    var display_rect;
-    if (ll_overlap == min_overlap) {
-      display_rect = lower_left;
-    } else if (lr_overlap == min_overlap) {
-      display_rect = lower_right;
-    } else if (ul_overlap == min_overlap) {
-      display_rect = upper_left;
-    } else {
-      display_rect = upper_right;
-    }
-    // console.log(display_rect);
+        var text1 = MOMENT().format('HH:mm');
+        var text2 = MOMENT().format('MMM DD, ddd');
 
-    PImage.registerFont('font/FreeSansBold.ttf', 'FreeSansBold').load(() => {
-      var img = PImage.make(w, h);
-      var ctx = img.getContext('2d');
-      PImage.decodeJPEGFromStream(fs.createReadStream(filename))
-        .then((frame) => {
-          // draw frame
-          ctx.drawImage(frame,
-            0, 0, w, h, // source dimensions
-            0, 0, w, h  // destination dimensions
-          );
-
-          var text1 = moment().format('HH:mm');
-          var text2 = moment().format('MMM DD, ddd');
-
-          ctx.font = (w / 6) + "pt 'FreeSansBold'";
-          var x;
-          var y = display_rect.top;
-          y += h / 40;
-          var size = ctx.measureText(text1);
+        ctx.font = (W / 6.5) + "pt 'FreeSansBold'";
+        var x;
+        var y = display_rect.top;
+        y += H / 80;
+        var size = ctx.measureText(text1);
+        // console.log(size);
+        x = display_rect.left + ((display_rect.right - display_rect.left + 1 - size.width) / 2);
+        y += size.emHeightAscent;
+        draw_shadow_text(ctx, text1, x, y, "#ffffff");
+        y += H / 80;
+        ctx.font = (W / 14) + "pt 'FreeSansBold'";
+        size = ctx.measureText(text2);
+        // console.log(size);
+        x = display_rect.left + ((display_rect.right - display_rect.left + 1 - size.width) / 2);
+        y += size.emHeightAscent;
+        draw_shadow_text(ctx, text2, x, y, "#ffffff");
+        if (currentWeather) {
+          var text3 = "" + currentWeather.temperature + "˚C  " + currentWeather.humidity + "%";
+          y += H / 40;
+          ctx.font = (W / 13) + "pt 'FreeSansBold'";
+          size = ctx.measureText(text3);
           // console.log(size);
           x = display_rect.left + ((display_rect.right - display_rect.left + 1 - size.width) / 2);
           y += size.emHeightAscent;
-          draw_shadow_text(ctx, text1, x, y, "#ffffff");
-          y += h / 40;
-          ctx.font = (w / 14) + "pt 'FreeSansBold'";
-          size = ctx.measureText(text2);
-          // console.log(size);
-          x = display_rect.left + ((display_rect.right - display_rect.left + 1 - size.width) / 2);
-          y += size.emHeightAscent;
-          draw_shadow_text(ctx, text2, x, y, "#ffffff");
-          if (currentWeather) {
-            var text3 = "" + currentWeather.temperature + "˚C  " + currentWeather.humidity + "%";
-            y += h / 20;
-            ctx.font = (w / 12) + "pt 'FreeSansBold'";
-            size = ctx.measureText(text3);
-            // console.log(size);
-            x = display_rect.left + ((display_rect.right - display_rect.left + 1 - size.width) / 2);
-            y += size.emHeightAscent;
-            draw_shadow_text(ctx, text3, x, y, "#ffffff");
+          draw_shadow_text(ctx, text3, x, y, "#ffffff");
+        }
+
+        var s = SHARP(img.data,
+          {
+            raw: {
+              width: img.width,
+              height: img.height,
+              channels: 4
+            }
+          });
+
+          const url_parts = URL.parse(req.url, true);
+          console.log(url_parts.query);
+          if (url_parts.query && url_parts.query.w) {
+            var out_width = parseInt(url_parts.query.w);
+            var out_height = parseInt(url_parts.query.h);
+            if (!out_height) {
+              out_height = out_width * H / W;
+            }
+            s = s.resize(out_width, out_height)
           }
 
-          sharp(img.data,
-            {
-              raw: {
-                width: img.width,
-                height: img.height,
-                channels: 4
-              }
-            })
-            .resize(320, 240)
-            .jpeg({
-              quality: 85,
-              // chromaSubsampling: '4:4:4'
-            })
-            .toBuffer()
-            .then(data => {
-              res.setHeader('Content-Type', 'image/jpeg');
-              res.setHeader('Content-Length', data.length);
-              res.write(data);
-              res.end();
-            });
-        });
-    });
+          s.jpeg({
+            quality: 85,
+            // chromaSubsampling: '4:4:4'
+          })
+          .toBuffer()
+          .then(data => {
+            res.setHeader('Content-Type', 'image/jpeg');
+            res.setHeader('Content-Length', data.length);
+            res.write(data);
+            res.end();
+          });
+      });
+  });
+}
+
+/* web server 3002 */
+//create a server object:
+HTTP.createServer(function (req, res) {
+  update_weather();
+
+  FS.readdir(PHOTOPATH, function (err, files) {
+    var filename = PHOTOPATH + files[Math.floor(Math.random() * files.length)];
+    face_detection(filename, req, res);
   });
 }).listen(8080, (err) => {
   if (err) {
