@@ -7,8 +7,8 @@
 #building Multi-Arch Images
 #docker buildx ls
 #docker buildx create --use
-#docker buildx build -t face-aware-photo-osd:1.0.1 --platform linux/arm
-#docker buildx build -t face-aware-photo-osd:1.0.1 --platform linux/arm --push moononournation/face-aware-photo-osd:1.0.1
+#docker buildx build --platform linux/arm -t face-aware-photo-osd:1.0.1 .
+#docker buildx build --platform linux/arm -t moononournation/face-aware-photo-osd:1.0.1 --push .
 
 # run command
 #docker run -it -p 8080:8080 -e TZ=Asia/Hong_Kong -v /path/to/photo:/app/photo moononournation/face-aware-photo-osd:1.0.1
