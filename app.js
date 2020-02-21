@@ -132,17 +132,17 @@ async function face_detection(filename, req, res) {
         var text1 = MOMENT().format('HH:mm');
         var text2 = MOMENT().format('MMM DD, ddd');
 
-        ctx.font = (W / 8) + "pt 'FreeSansBold'";
+        ctx.font = (W / 7.5) + "pt 'FreeSansBold'";
         var x;
         var y = display_rect.top;
-        y += H / 20;
+        y += H / 40;
         var size = ctx.measureText(text1);
         // console.log(size);
         x = display_rect.left + ((display_rect.right - display_rect.left + 1 - size.width) / 2);
         y += size.emHeightAscent;
         draw_shadow_text(ctx, text1, x, y, "#ffffff");
         y += H / 80;
-        ctx.font = (W / 18) + "pt 'FreeSansBold'";
+        ctx.font = (W / 16) + "pt 'FreeSansBold'";
         size = ctx.measureText(text2);
         // console.log(size);
         x = display_rect.left + ((display_rect.right - display_rect.left + 1 - size.width) / 2);
@@ -151,7 +151,7 @@ async function face_detection(filename, req, res) {
         if (currentWeather) {
           var text3 = "" + currentWeather.temperature + "˚C  " + currentWeather.humidity + "%";
           y += H / 40;
-          ctx.font = (W / 17) + "pt 'FreeSansBold'";
+          ctx.font = (W / 15) + "pt 'FreeSansBold'";
           size = ctx.measureText(text3);
           // console.log(size);
           x = display_rect.left + ((display_rect.right - display_rect.left + 1 - size.width) / 2);
@@ -169,7 +169,7 @@ async function face_detection(filename, req, res) {
           });
 
           const url_parts = URL.parse(req.url, true);
-          console.log(url_parts.query);
+          // console.log(url_parts.query);
           if (url_parts.query && url_parts.query.w) {
             var out_width = parseInt(url_parts.query.w);
             var out_height = parseInt(url_parts.query.h);
