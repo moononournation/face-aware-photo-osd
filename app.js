@@ -25,10 +25,12 @@ function overlap_area(range, rect) {
 }
 
 function draw_shadow_text(ctx, text, x, y, color) {
-  ctx.fillStyle = '#3f3f3f';
+  ctx.fillStyle = '#7f7f7f';
   ctx.fillText(text, x - 1, y - 1);
   ctx.fillStyle = '#3f3f3f';
-  ctx.fillText(text, x + 4, y + 4);
+  ctx.fillText(text, x + 1, y + 1);
+  ctx.fillText(text, x + 2, y + 2);
+  ctx.fillText(text, x + 3, y + 3);
   ctx.fillStyle = color;
   ctx.fillText(text, x, y);
 }
@@ -130,17 +132,17 @@ async function face_detection(filename, req, res) {
         var text1 = MOMENT().format('HH:mm');
         var text2 = MOMENT().format('MMM DD, ddd');
 
-        ctx.font = (W / 6.5) + "pt 'FreeSansBold'";
+        ctx.font = (W / 8) + "pt 'FreeSansBold'";
         var x;
         var y = display_rect.top;
-        y += H / 80;
+        y += H / 20;
         var size = ctx.measureText(text1);
         // console.log(size);
         x = display_rect.left + ((display_rect.right - display_rect.left + 1 - size.width) / 2);
         y += size.emHeightAscent;
         draw_shadow_text(ctx, text1, x, y, "#ffffff");
         y += H / 80;
-        ctx.font = (W / 14) + "pt 'FreeSansBold'";
+        ctx.font = (W / 18) + "pt 'FreeSansBold'";
         size = ctx.measureText(text2);
         // console.log(size);
         x = display_rect.left + ((display_rect.right - display_rect.left + 1 - size.width) / 2);
@@ -149,7 +151,7 @@ async function face_detection(filename, req, res) {
         if (currentWeather) {
           var text3 = "" + currentWeather.temperature + "˚C  " + currentWeather.humidity + "%";
           y += H / 40;
-          ctx.font = (W / 13) + "pt 'FreeSansBold'";
+          ctx.font = (W / 17) + "pt 'FreeSansBold'";
           size = ctx.measureText(text3);
           // console.log(size);
           x = display_rect.left + ((display_rect.right - display_rect.left + 1 - size.width) / 2);
