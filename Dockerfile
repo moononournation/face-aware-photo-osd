@@ -31,7 +31,7 @@ RUN apt-get install -y --no-install-recommends \
 
 COPY package*.json ./
 
-RUN npm install -f -s opencv4nodejs@latest
+RUN npm install --save opencv4nodejs@latest
 
 RUN npm install
 
