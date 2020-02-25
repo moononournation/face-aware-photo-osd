@@ -6,7 +6,8 @@
 #building Multi-Arch Images commands
 #docker buildx ls
 #docker buildx create --use
-#docker buildx build --platform linux/arm -t moononournation/face-aware-photo-osd:1.0.1 --push .
+#docker buildx build --platform linux/amd64,linux/arm -t moononournation/face-aware-photo-osd:1.0.1 .
+#docker buildx build --platform linux/amd64,linux/arm -t moononournation/face-aware-photo-osd:1.0.1 --push .
 
 # run command
 #docker run -it -p 8080:8080 -e TZ=Asia/Hong_Kong -v /path/to/photo:/app/photo -v /path/to/app.js:/app/app.js moononournation/face-aware-photo-osd:1.0.1
@@ -29,6 +30,8 @@ RUN apt-get install -y --no-install-recommends \
       python
 
 COPY package*.json ./
+
+RUN npm install -f -s opencv4nodejs@latest
 
 RUN npm install
 
