@@ -11,6 +11,7 @@ const CLASSIFIER = new CV.CascadeClassifier(CV.HAAR_FRONTALFACE_ALT2);
 
 // photos directory
 const PHOTOPATH = "photo/";
+const OSDUPDATEINTERVAL = (10 * 60 * 1000); // 10 minutes
 
 // preload TTF font file
 PUREIMAGE.registerFont('font/FreeSansBold.ttf', 'FreeSansBold').load(() => {
@@ -43,52 +44,55 @@ PUREIMAGE.registerFont('font/FreeSansBold.ttf', 'FreeSansBold').load(() => {
     ctx.fillText(text, x, y);
   }
 
-  // function for retrieving most recent weather RSS feed
-  var currentWeather;
-  function update_weather() {
-    if ((!currentWeather) || ((Date.now() - currentWeather.last_update) > (10 * 60 * 1000))) {
+  // function for retrieving RSS feed display to OSD
+  var osd_data;
+  function update_osd() {
+    if ((!osd_data) || ((Date.now() - osd_data.last_update) > OSDUPDATEINTERVAL)) {
 
-      // You should change following script to your local weather RSS feed
-      // Begin: get HK weather
-      HTTP.get('http://rss.weather.gov.hk/rss/CurrentWeather.xml', (resp) => {
-        let rssData = '';
+      // You map change following script to your selected RSS feed
+      if (process.env.OSD == "HK_Weather") {
+        // Begin: get HK weather
+        HTTP.get('http://rss.weather.gov.hk/rss/CurrentWeather.xml', (resp) => {
+          let rssData = '';
 
-        // A chunk of data has been recieved.
-        resp.on('data', (chunk) => {
-          rssData += chunk;
-        });
+          // A chunk of data has been recieved.
+          resp.on('data', (chunk) => {
+            rssData += chunk;
+          });
 
-        // The whole response has been received. Print out the result.
-        resp.on('end', () => {
-          // console.log("rssData:", rssData);
+          // The whole response has been received. Print out the result.
+          resp.on('end', () => {
+            // console.log("rssData:", rssData);
 
-          let key = "<img src=\"";
-          let start_idx = rssData.search(key) + key.length;
-          let end_idx = rssData.indexOf("\"", start_idx);
-          let image = rssData.substring(start_idx, end_idx);
-          key = "Air temperature : ";
-          start_idx = rssData.search(key) + key.length;
-          end_idx = rssData.indexOf(" ", start_idx);
-          let temperature = parseInt(rssData.substring(start_idx, end_idx));
-          key = "Relative Humidity : ";
-          start_idx = rssData.search(key) + key.length;
-          end_idx = rssData.indexOf(" ", start_idx);
-          let humidity = parseInt(rssData.substring(start_idx, end_idx));
+            let key = "<img src=\"";
+            let start_idx = rssData.search(key) + key.length;
+            let end_idx = rssData.indexOf("\"", start_idx);
+            let image = rssData.substring(start_idx, end_idx);
+            key = "Air temperature : ";
+            start_idx = rssData.search(key) + key.length;
+            end_idx = rssData.indexOf(" ", start_idx);
+            let temperature = parseInt(rssData.substring(start_idx, end_idx));
+            key = "Relative Humidity : ";
+            start_idx = rssData.search(key) + key.length;
+            end_idx = rssData.indexOf(" ", start_idx);
+            let humidity = parseInt(rssData.substring(start_idx, end_idx));
 
-          currentWeather = {
-            image: image,
-            temperature: temperature,
-            humidity: humidity,
-            last_update: Date.now()
-          };
+            osd_data = {
+              image: image,
+              temperature: temperature,
+              humidity: humidity,
+              last_update: Date.now(),
+              text: "" + temperature + "˚C  " + humidity + "%"
+            };
 
-          console.log("currentWeather:", currentWeather);
+            console.log("osd_data:", osd_data);
+          });
+
+        }).on("error", (err) => {
+          console.log("Error:", err.message);
         });
         // End: get HK weather
-
-      }).on("error", (err) => {
-        console.log("Error:", err.message);
-      });
+      }
     }
   }
 
@@ -105,6 +109,8 @@ PUREIMAGE.registerFont('font/FreeSansBold.ttf', 'FreeSansBold').load(() => {
       // create OpenCV Mat object from photo buffer
       const IMG = new CV.Mat(buf, H, W, CV.CV_8UC3);
       // console.log("IMG:", IMG);
+      console.log("load photo used:", Date.now() - start_time);
+      start_time = Date.now();
 
       // OpenCV face detect
       CLASSIFIER.detectMultiScaleAsync(IMG.bgrToGray(), (err, result) => {
@@ -124,19 +130,39 @@ PUREIMAGE.registerFont('font/FreeSansBold.ttf', 'FreeSansBold').load(() => {
               if ((outW / outH) > (W / H)) {
                 cropH = Math.round(W * outH / outW);
                 dy = Math.round((H - cropH) / 2);
+                var top = cropH, bottom = 0;
                 result.objects.forEach((rect) => {
-                  if (rect.y < dy) {
-                    dy = rect.y;
+                  if (top > rect.y) {
+                    top = rect.y;
+                  }
+                  if (bottom < (rect.y + rect.height - 1)) {
+                    bottom = rect.y + rect.height - 1;
                   }
                 });
+                if (dy > top) {
+                  dy = top;
+                }
+                if (dy < (bottom - cropH + 1)) {
+                  dy = bottom - cropH + 1;
+                }
               } else {
                 cropW = Math.round(H * outW / outH);
                 dx = Math.round((W - cropW) / 2);
+                var left = cropW, right = 0;
                 result.objects.forEach((rect) => {
-                  if (rect.x < dx) {
-                    dx = rect.x;
+                  if (left > rect.x) {
+                    left = rect.x;
+                  }
+                  if (right < (rect.x + rect.width - 1)) {
+                    right = rect.x + rect.width - 1;
                   }
                 });
+                if (dx > left) {
+                  dx = left;
+                }
+                if (dx < (right - cropW + 1)) {
+                  dx = right - cropW + 1;
+                }
               }
               // console.log("dx:", dx, "dy:", dy, "cropW:", cropW, "cropH:", cropH, "outW", outW, "outH", outH);
             } else {
@@ -148,10 +174,6 @@ PUREIMAGE.registerFont('font/FreeSansBold.ttf', 'FreeSansBold').load(() => {
           }
         }
 
-        // determine font scale
-        const FONTSCALE = Math.min(outW, outH) / 240;
-        // console.log("FONTSCALE:", FONTSCALE);
-        
         // calculate 4 corners OSD range
         const OSDSQUARESIZE = Math.round(Math.min(cropW, cropH) / 2);
         // console.log("OSDSQUARESIZE:", OSDSQUARESIZE);
@@ -164,30 +186,40 @@ PUREIMAGE.registerFont('font/FreeSansBold.ttf', 'FreeSansBold').load(() => {
         const LOWERRIGHT = { top: dy + cropH - OSDSQUARESIZE + 1, bottom: dy + cropH, left: dx + cropW - OSDSQUARESIZE + 1, right: dx + cropW }
         // console.log("LOWERRIGHT:", LOWERRIGHT);
 
+        // determine font scale
+        const FONTSCALE = Math.min(outW, outH) / 1000;
+        // console.log("FONTSCALE:", FONTSCALE);
+
         // determine OSD position by least face overlapping area
+        var i = -1;
+        var certainty;
         var ul_overlap = 0;
         var ur_overlap = 0;
         var ll_overlap = 0;
         var lr_overlap = 0;
 
         result.objects.forEach((rect) => {
-          ul_overlap += overlap_area(UPPERLEFT, rect);
-          ur_overlap += overlap_area(UPPERRIGHT, rect);
-          ll_overlap += overlap_area(LOWERLEFT, rect);
-          lr_overlap += overlap_area(LOWERRIGHT, rect);
+          certainty = result.numDetections[++i];
+          ul_overlap += overlap_area(UPPERLEFT, rect) * certainty;
+          ur_overlap += overlap_area(UPPERRIGHT, rect) * certainty;
+          ll_overlap += overlap_area(LOWERLEFT, rect) * certainty;
+          lr_overlap += overlap_area(LOWERRIGHT, rect) * certainty;
         });
 
         var min_overlap = Math.min(Math.min(ul_overlap, ur_overlap), Math.min(ll_overlap, lr_overlap));
-        var osd_size = Math.round(FONTSCALE * 120);
-        var osd_offset;
+        var osd_x, osd_y;
         if (ll_overlap == min_overlap) {
-          osd_offset = { x: 0, y: outH - 1 - osd_size };
+          osd_x = Math.round(FONTSCALE * 50);
+          osd_y = outH - Math.round(FONTSCALE * 440);
         } else if (lr_overlap == min_overlap) {
-          osd_offset = { x: outW - 1 - osd_size, y: outH - 1 - osd_size };
+          osd_x = outW - Math.round(FONTSCALE * 500);
+          osd_y = outH - Math.round(FONTSCALE * 440);
         } else if (ul_overlap == min_overlap) {
-          osd_offset = { x: 0, y: 0 };
+          osd_x = Math.round(FONTSCALE * 50);
+          osd_y = Math.round(FONTSCALE * 50);
         } else /* (ur_overlap == min_overlap) */ {
-          osd_offset = { x: outW - 1 - osd_size, y: 0 };
+          osd_x = outW - Math.round(FONTSCALE * 500);
+          osd_y = Math.round(FONTSCALE * 50);
         }
         // console.log("osd_offset:", osd_offset);
 
@@ -221,27 +253,25 @@ PUREIMAGE.registerFont('font/FreeSansBold.ttf', 'FreeSansBold').load(() => {
             const TEXT2 = MOMENT().format('MMM DD, ddd');
 
             // draw OSD
-            var x = osd_offset.x + Math.round(FONTSCALE * 10);
-            var y = osd_offset.y + Math.round(FONTSCALE * 10);
-            ctx.font = (FONTSCALE * 40) + "pt 'FreeSansBold'";
+            ctx.font = (FONTSCALE * 184) + "pt 'FreeSansBold'";
             var size = ctx.measureText(TEXT1);
             // console.log("size:", size);
-            y += size.emHeightAscent;
-            draw_text_with_border(ctx, TEXT1, x, y, "#ffffff");
-            y += Math.round(FONTSCALE * 8);
-            ctx.font = (FONTSCALE * 18) + "pt 'FreeSansBold'";
+            osd_y += Math.round(size.emHeightAscent);
+            draw_text_with_border(ctx, TEXT1, osd_x, osd_y, "#ffffff");
+            osd_y += Math.round(FONTSCALE * 20);
+            ctx.font = (FONTSCALE * 80) + "pt 'FreeSansBold'";
             size = ctx.measureText(TEXT2);
             // console.log("size:", size);
-            y += size.emHeightAscent;
-            draw_text_with_border(ctx, TEXT2, x, y, "#ffffff");
-            if (currentWeather) {
-              var text3 = "" + currentWeather.temperature + "˚C  " + currentWeather.humidity + "%";
-              y += Math.round(FONTSCALE * 16);
-              ctx.font = (FONTSCALE * 21) + "pt 'FreeSansBold'";
+            osd_y += Math.round(size.emHeightAscent);
+            draw_text_with_border(ctx, TEXT2, osd_x, osd_y, "#ffffff");
+            if (osd_data) {
+              var text3 = osd_data.text;
+              osd_y += Math.round(FONTSCALE * 40);
+              ctx.font = (FONTSCALE * 96) + "pt 'FreeSansBold'";
               size = ctx.measureText(text3);
               // console.log("size:", size);
-              y += size.emHeightAscent;
-              draw_text_with_border(ctx, text3, x, y, "#ffffff");
+              osd_y += Math.round(size.emHeightAscent);
+              draw_text_with_border(ctx, text3, osd_x, osd_y, "#ffffff");
             }
             console.log("draw OSD used:", Date.now() - start_time);
             start_time = Date.now();
@@ -256,8 +286,8 @@ PUREIMAGE.registerFont('font/FreeSansBold.ttf', 'FreeSansBold').load(() => {
                 }
               })
               .jpeg({
-                quality: 75,
-                chromaSubsampling: '4:4:4'
+                quality: 94,
+                // chromaSubsampling: '4:4:4'
               })
               .toBuffer()
               .then(data => {
@@ -278,7 +308,7 @@ PUREIMAGE.registerFont('font/FreeSansBold.ttf', 'FreeSansBold').load(() => {
   /* web server 3002 */
   //create a server object:
   HTTP.createServer(function (req, res) {
-    update_weather();
+    update_osd();
 
     FS.readdir(PHOTOPATH, function (err, files) {
       var filename = PHOTOPATH + files[Math.floor(Math.random() * files.length)];
