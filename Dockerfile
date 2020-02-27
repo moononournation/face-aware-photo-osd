@@ -18,26 +18,20 @@ EXPOSE 8080
 
 WORKDIR /app
 
-RUN npm i -g npm \
-    && apt-get update \
-    && apt-get upgrade -y
+COPY package*.json ./
 
-RUN apt-get install -y --no-install-recommends \
+RUN npm install -g npm \
+    && npm install -g node-dev \
+    && apt-get update \
+    && apt-get upgrade -y \
+    && apt-get install -y --no-install-recommends \
       build-essential \
       ca-certificates \
       cmake \
       git \
-      python
-
-COPY package*.json ./
-
-RUN npm install --save opencv4nodejs@latest
-
-RUN npm install
-
-RUN npm install -g node-dev
-
-RUN npm cache clean --force \
+      python \
+    && npm install \
+    && npm cache clean --force \
     && apt-get remove -y \
       build-essential \
       ca-certificates \
