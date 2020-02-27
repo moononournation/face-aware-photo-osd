@@ -134,8 +134,7 @@ PUREIMAGE.registerFont('font/FreeSansBold.ttf', 'FreeSansBold').load(() => {
                 result.objects.forEach((rect) => {
                   if (top > rect.y) {
                     top = rect.y;
-                  }
-                  if (bottom < (rect.y + rect.height - 1)) {
+                  } else if (bottom < (rect.y + rect.height - 1)) {
                     bottom = rect.y + rect.height - 1;
                   }
                 });
@@ -152,8 +151,7 @@ PUREIMAGE.registerFont('font/FreeSansBold.ttf', 'FreeSansBold').load(() => {
                 result.objects.forEach((rect) => {
                   if (left > rect.x) {
                     left = rect.x;
-                  }
-                  if (right < (rect.x + rect.width - 1)) {
+                  } else if (right < (rect.x + rect.width - 1)) {
                     right = rect.x + rect.width - 1;
                   }
                 });
@@ -175,15 +173,16 @@ PUREIMAGE.registerFont('font/FreeSansBold.ttf', 'FreeSansBold').load(() => {
         }
 
         // calculate 4 corners OSD range
-        const OSDSQUARESIZE = Math.round(Math.min(cropW, cropH) / 2);
+        const OSDHEIGHT = Math.round(Math.min(cropW, cropH) / 2);
+        const OSDWIDTH = Math.round(OSDHEIGHT * 1.2);
         // console.log("OSDSQUARESIZE:", OSDSQUARESIZE);
-        const UPPERLEFT = { top: dy + 1, bottom: dy + OSDSQUARESIZE, left: dx + 1, right: dx + OSDSQUARESIZE }
+        const UPPERLEFT = { top: dy + 1, bottom: dy + OSDHEIGHT, left: dx + 1, right: dx + OSDWIDTH }
         // console.log("UPPERLEFT:", UPPERLEFT);
-        const UPPERRIGHT = { top: dy + 1, bottom: dy + OSDSQUARESIZE, left: dx + cropW - OSDSQUARESIZE + 1, right: dx + cropW }
+        const UPPERRIGHT = { top: dy + 1, bottom: dy + OSDHEIGHT, left: dx + cropW - OSDWIDTH + 1, right: dx + cropW }
         // console.log("UPPERRIGHT:", UPPERRIGHT);
-        const LOWERLEFT = { top: dy + cropH - OSDSQUARESIZE + 1, bottom: dy + cropH, left: dx + 1, right: dx + OSDSQUARESIZE }
+        const LOWERLEFT = { top: dy + cropH - OSDHEIGHT + 1, bottom: dy + cropH, left: dx + 1, right: dx + OSDWIDTH }
         // console.log("LOWERLEFT:", LOWERLEFT);
-        const LOWERRIGHT = { top: dy + cropH - OSDSQUARESIZE + 1, bottom: dy + cropH, left: dx + cropW - OSDSQUARESIZE + 1, right: dx + cropW }
+        const LOWERRIGHT = { top: dy + cropH - OSDHEIGHT + 1, bottom: dy + cropH, left: dx + cropW - OSDWIDTH + 1, right: dx + cropW }
         // console.log("LOWERRIGHT:", LOWERRIGHT);
 
         // determine font scale
@@ -210,15 +209,15 @@ PUREIMAGE.registerFont('font/FreeSansBold.ttf', 'FreeSansBold').load(() => {
         var osd_x, osd_y;
         if (ll_overlap == min_overlap) {
           osd_x = Math.round(FONTSCALE * 50);
-          osd_y = outH - Math.round(FONTSCALE * 440);
+          osd_y = outH - Math.round(FONTSCALE * 500);
         } else if (lr_overlap == min_overlap) {
-          osd_x = outW - Math.round(FONTSCALE * 500);
-          osd_y = outH - Math.round(FONTSCALE * 440);
+          osd_x = outW - Math.round(FONTSCALE * 600);
+          osd_y = outH - Math.round(FONTSCALE * 500);
         } else if (ul_overlap == min_overlap) {
           osd_x = Math.round(FONTSCALE * 50);
           osd_y = Math.round(FONTSCALE * 50);
         } else /* (ur_overlap == min_overlap) */ {
-          osd_x = outW - Math.round(FONTSCALE * 500);
+          osd_x = outW - Math.round(FONTSCALE * 600);
           osd_y = Math.round(FONTSCALE * 50);
         }
         // console.log("osd_offset:", osd_offset);
@@ -253,21 +252,21 @@ PUREIMAGE.registerFont('font/FreeSansBold.ttf', 'FreeSansBold').load(() => {
             const TEXT2 = MOMENT().format('MMM DD, ddd');
 
             // draw OSD
-            ctx.font = (FONTSCALE * 184) + "pt 'FreeSansBold'";
+            ctx.font = (FONTSCALE * 232) + "pt 'FreeSansBold'";
             var size = ctx.measureText(TEXT1);
             // console.log("size:", size);
             osd_y += Math.round(size.emHeightAscent);
             draw_text_with_border(ctx, TEXT1, osd_x, osd_y, "#ffffff");
-            osd_y += Math.round(FONTSCALE * 20);
-            ctx.font = (FONTSCALE * 80) + "pt 'FreeSansBold'";
+            osd_y += Math.round(FONTSCALE * 10);
+            ctx.font = (FONTSCALE * 112) + "pt 'FreeSansBold'";
             size = ctx.measureText(TEXT2);
             // console.log("size:", size);
             osd_y += Math.round(size.emHeightAscent);
             draw_text_with_border(ctx, TEXT2, osd_x, osd_y, "#ffffff");
             if (osd_data) {
               var text3 = osd_data.text;
-              osd_y += Math.round(FONTSCALE * 40);
-              ctx.font = (FONTSCALE * 96) + "pt 'FreeSansBold'";
+              osd_y += Math.round(FONTSCALE * 30);
+              ctx.font = (FONTSCALE * 120) + "pt 'FreeSansBold'";
               size = ctx.measureText(text3);
               // console.log("size:", size);
               osd_y += Math.round(size.emHeightAscent);
