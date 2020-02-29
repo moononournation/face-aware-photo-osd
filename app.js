@@ -173,8 +173,8 @@ PUREIMAGE.registerFont('font/FreeSansBold.ttf', 'FreeSansBold').load(() => {
         }
 
         // calculate 4 corners OSD range
-        const OSDHEIGHT = Math.round(Math.min(cropW, cropH) / 2);
-        const OSDWIDTH = Math.round(OSDHEIGHT * 1.2);
+        const OSDHEIGHT = Math.round(Math.min(cropW, cropH) * 0.55);
+        const OSDWIDTH = Math.round(Math.min(cropW, cropH) * 0.65);
         // console.log("OSDSQUARESIZE:", OSDSQUARESIZE);
         const UPPERLEFT = { top: dy + 1, bottom: dy + OSDHEIGHT, left: dx + 1, right: dx + OSDWIDTH }
         // console.log("UPPERLEFT:", UPPERLEFT);
@@ -204,6 +204,7 @@ PUREIMAGE.registerFont('font/FreeSansBold.ttf', 'FreeSansBold').load(() => {
           ll_overlap += overlap_area(LOWERLEFT, rect) * certainty;
           lr_overlap += overlap_area(LOWERRIGHT, rect) * certainty;
         });
+        console.log("ul_overlap:", ul_overlap, "ur_overlap:", ur_overlap, "ll_overlap:", ll_overlap, "lr_overlap:", lr_overlap);
 
         var min_overlap = Math.min(Math.min(ul_overlap, ur_overlap), Math.min(ll_overlap, lr_overlap));
         var osd_x, osd_y;
@@ -307,12 +308,30 @@ PUREIMAGE.registerFont('font/FreeSansBold.ttf', 'FreeSansBold').load(() => {
   /* web server 3002 */
   //create a server object:
   HTTP.createServer(function (req, res) {
-    update_osd();
+    if (req.url == "/favicon.ico") {
+      res.end();
+    } else if (req.url == "/") {
+      res.setHeader('Content-Type', 'text/html');
+      res.write(
+`<html>
+<head>
+<style type="text/css">body{margin:0;}</style>
+<script>
+function p(){document.getElementById("photo").src="/?w="+window.innerWidth+"&h="+window.innerHeight+"&t="+Date.now();}
+window.onload=function(){p();setInterval(p,60000);};
+</script>
+</head>
+<body><img id="photo"><body>
+</html>`);
+      res.end();
+    } else {
+      update_osd();
 
-    FS.readdir(PHOTOPATH, function (err, files) {
-      var filename = PHOTOPATH + files[Math.floor(Math.random() * files.length)];
-      photo_OSD_handler(filename, req, res);
-    });
+      FS.readdir(PHOTOPATH, function (err, files) {
+        var filename = PHOTOPATH + files[Math.floor(Math.random() * files.length)];
+        photo_OSD_handler(filename, req, res);
+      });
+    }
   }).listen(8080, (err) => {
     if (err) {
       return console.log("something bad happened", err)
