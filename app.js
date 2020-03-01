@@ -259,7 +259,7 @@ PUREIMAGE.registerFont('font/FreeSansBold.ttf', 'FreeSansBold').load(() => {
             osd_y += Math.round(size.emHeightAscent);
             draw_text_with_border(ctx, TEXT1, osd_x, osd_y, "#ffffff");
             osd_y += Math.round(FONTSCALE * 10);
-            ctx.font = (FONTSCALE * 112) + "pt 'FreeSansBold'";
+            ctx.font = (FONTSCALE * 104) + "pt 'FreeSansBold'";
             size = ctx.measureText(TEXT2);
             // console.log("size:", size);
             osd_y += Math.round(size.emHeightAscent);
