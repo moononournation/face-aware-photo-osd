@@ -34,11 +34,11 @@ PUREIMAGE.registerFont('font/FreeSansBold.ttf', 'FreeSansBold').load(() => {
   // function for drawing text that can readable on any color background
   function draw_text_with_border(ctx, text, x, y, color) {
     // draw upper left border
-    ctx.fillStyle = '#bfbfbf';
+    ctx.fillStyle = '#7f7f7f';
     ctx.fillText(text, x - 1, y - 1);
     // draw lower right border
     ctx.fillStyle = '#3f3f3f';
-    ctx.fillText(text, x + 1, y + 1);
+    ctx.fillText(text, x + 2, y + 2);
     // draw text
     ctx.fillStyle = color;
     ctx.fillText(text, x, y);
@@ -131,35 +131,39 @@ PUREIMAGE.registerFont('font/FreeSansBold.ttf', 'FreeSansBold').load(() => {
                 cropH = Math.round(W * outH / outW);
                 dy = Math.round((H - cropH) / 2);
                 var top = cropH, bottom = 0;
-                result.objects.forEach((rect) => {
-                  if (top > rect.y) {
-                    top = rect.y;
-                  } else if (bottom < (rect.y + rect.height - 1)) {
-                    bottom = rect.y + rect.height - 1;
+                if (dy && result) {
+                  result.objects.forEach((rect) => {
+                    if (top > rect.y) {
+                      top = rect.y;
+                    } else if (bottom < (rect.y + rect.height - 1)) {
+                      bottom = rect.y + rect.height - 1;
+                    }
+                  });
+                  if (dy > top) {
+                    dy = top;
                   }
-                });
-                if (dy > top) {
-                  dy = top;
-                }
-                if (dy < (bottom - cropH + 1)) {
-                  dy = bottom - cropH + 1;
+                  if (dy < (bottom - cropH + 1)) {
+                    dy = bottom - cropH + 1;
+                  }
                 }
               } else {
                 cropW = Math.round(H * outW / outH);
                 dx = Math.round((W - cropW) / 2);
                 var left = cropW, right = 0;
-                result.objects.forEach((rect) => {
-                  if (left > rect.x) {
-                    left = rect.x;
-                  } else if (right < (rect.x + rect.width - 1)) {
-                    right = rect.x + rect.width - 1;
+                if (dx && result) {
+                  result.objects.forEach((rect) => {
+                    if (left > rect.x) {
+                      left = rect.x;
+                    } else if (right < (rect.x + rect.width - 1)) {
+                      right = rect.x + rect.width - 1;
+                    }
+                  });
+                  if (dx > left) {
+                    dx = left;
                   }
-                });
-                if (dx > left) {
-                  dx = left;
-                }
-                if (dx < (right - cropW + 1)) {
-                  dx = right - cropW + 1;
+                  if (dx < (right - cropW + 1)) {
+                    dx = right - cropW + 1;
+                  }
                 }
               }
               // console.log("dx:", dx, "dy:", dy, "cropW:", cropW, "cropH:", cropH, "outW", outW, "outH", outH);
@@ -259,7 +263,7 @@ PUREIMAGE.registerFont('font/FreeSansBold.ttf', 'FreeSansBold').load(() => {
             osd_y += Math.round(size.emHeightAscent);
             draw_text_with_border(ctx, TEXT1, osd_x, osd_y, "#ffffff");
             osd_y += Math.round(FONTSCALE * 10);
-            ctx.font = (FONTSCALE * 104) + "pt 'FreeSansBold'";
+            ctx.font = (FONTSCALE * 96) + "pt 'FreeSansBold'";
             size = ctx.measureText(TEXT2);
             // console.log("size:", size);
             osd_y += Math.round(size.emHeightAscent);
