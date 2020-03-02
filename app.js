@@ -7,7 +7,11 @@ const SHARP = require('sharp');
 const URL = require('url');
 
 // OpenCV face detection classifier
+// const CLASSIFIER = new CV.CascadeClassifier(CV.HAAR_EYE);
+// const CLASSIFIER = new CV.CascadeClassifier(CV.HAAR_FRONTALFACE_DEFAULT);
+// const CLASSIFIER = new CV.CascadeClassifier(CV.HAAR_FRONTALFACE_ALT);
 const CLASSIFIER = new CV.CascadeClassifier(CV.HAAR_FRONTALFACE_ALT2);
+// const CLASSIFIER = new CV.CascadeClassifier(CV.HAAR_FRONTALFACE_ALT_TREE);
 
 // photos directory
 const PHOTOPATH = "photo/";
@@ -135,15 +139,17 @@ PUREIMAGE.registerFont('font/FreeSansBold.ttf', 'FreeSansBold').load(() => {
                   result.objects.forEach((rect) => {
                     if (top > rect.y) {
                       top = rect.y;
-                    } else if (bottom < (rect.y + rect.height - 1)) {
+                    }
+                    if (bottom < (rect.y + rect.height - 1)) {
                       bottom = rect.y + rect.height - 1;
                     }
                   });
-                  if (dy > top) {
-                    dy = top;
-                  }
+                  // console.log("top:", top, "bottom:", bottom);
                   if (dy < (bottom - cropH + 1)) {
                     dy = bottom - cropH + 1;
+                  }
+                  if (dy > top) {
+                    dy = top;
                   }
                 }
               } else {
@@ -154,15 +160,17 @@ PUREIMAGE.registerFont('font/FreeSansBold.ttf', 'FreeSansBold').load(() => {
                   result.objects.forEach((rect) => {
                     if (left > rect.x) {
                       left = rect.x;
-                    } else if (right < (rect.x + rect.width - 1)) {
+                    }
+                    if (right < (rect.x + rect.width - 1)) {
                       right = rect.x + rect.width - 1;
                     }
                   });
-                  if (dx > left) {
-                    dx = left;
-                  }
+                  // console.log("left:", left, "right:", right);
                   if (dx < (right - cropW + 1)) {
                     dx = right - cropW + 1;
+                  }
+                  if (dx > left) {
+                    dx = left;
                   }
                 }
               }
@@ -178,8 +186,9 @@ PUREIMAGE.registerFont('font/FreeSansBold.ttf', 'FreeSansBold').load(() => {
 
         // calculate 4 corners OSD range
         const OSDHEIGHT = Math.round(Math.min(cropW, cropH) * 0.55);
+        // console.log("OSDHEIGHT:", OSDHEIGHT);
         const OSDWIDTH = Math.round(Math.min(cropW, cropH) * 0.65);
-        // console.log("OSDSQUARESIZE:", OSDSQUARESIZE);
+        // console.log("OSDWIDTH:", OSDWIDTH);
         const UPPERLEFT = { top: dy + 1, bottom: dy + OSDHEIGHT, left: dx + 1, right: dx + OSDWIDTH }
         // console.log("UPPERLEFT:", UPPERLEFT);
         const UPPERRIGHT = { top: dy + 1, bottom: dy + OSDHEIGHT, left: dx + cropW - OSDWIDTH + 1, right: dx + cropW }
