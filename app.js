@@ -1,12 +1,18 @@
 const CV = require('opencv4nodejs');
 const FS = require('fs');
 const HTTP = require('http');
+const HTTPS = require('https');
 const MOMENT = require('moment');
 const PUREIMAGE = require('pureimage');
 const SHARP = require('sharp');
 const URL = require('url');
 
 const DEBUGMODE = (process.env.DEBUG == "Y");
+const GOOGLEPHOTOURL = process.env.GOOGLEPHOTO;
+const GOOGLEPHOTOURLPREFIX = "https://lh3.googleusercontent.com/";
+const GOOGLEPHOTOSEEKPATTERN = "id=\"_ij\"";
+const GOOGLEPHOTOSEARCHPATTERN = "\",[\"" + GOOGLEPHOTOURLPREFIX;
+const GOOGLEPHOTOLIST = [];
 
 // OpenCV face detection classifier
 const CLASSIFIER1 = new CV.CascadeClassifier(CV.HAAR_EYE);
@@ -54,6 +60,95 @@ PUREIMAGE.registerFont('font/FreeSansBold.ttf', 'FreeSansBold').load(() => {
     // draw text
     ctx.fillStyle = color;
     ctx.fillText(text, x, y);
+  }
+
+  var downloadedPhoto = 0;
+  function downloadPhoto() {
+    if (downloadedPhoto < GOOGLEPHOTOLIST.length) {
+      var photoId = GOOGLEPHOTOLIST[downloadedPhoto];
+      var filename = PHOTOPATH + "p" + photoId.substring(1, 20) + ".jpg";
+      if (FS.existsSync(filename)) {
+        if (DEBUGMODE) {
+          console.log("Exists photo: ", filename);
+        }
+        downloadedPhoto++;
+        downloadPhoto();
+      } else {
+        var file = FS.createWriteStream(filename);
+        HTTPS.get(GOOGLEPHOTOURLPREFIX + photoId + "=w1921", function (res) {
+          res.on('data', (chunk) => { file.write(chunk); });
+          res.on('end', () => {
+            file.close();
+            if (DEBUGMODE) {
+              console.log("Downloaded photo: ", filename);
+            }
+            downloadedPhoto++;
+            downloadPhoto();
+          });
+        });
+      }
+    } else {
+      if (DEBUGMODE) {
+        console.log("All Downloaded: ", GOOGLEPHOTOLIST.length);
+      }
+    }
+  }
+
+  function getGooglePhoto(url) {
+    if (DEBUGMODE) {
+      console.log("[" + url + "]");
+    }
+    HTTPS.get(url, (res) => {
+      const { statusCode } = res;
+
+      if (statusCode == 302) {
+        res.destroy();
+        getGooglePhoto(res.headers.location);
+      } else if (statusCode == 200) {
+        res.setEncoding('utf8');
+        let rawData = '';
+        res.on('data', (chunk) => { rawData += chunk; });
+        res.on('end', () => {
+          googlePhotoList = rawData;
+          lines = rawData.split('\n');
+          var seekPatternFound = false;
+          lines.forEach((line) => {
+            if (!seekPatternFound) {
+              var idx = line.indexOf(GOOGLEPHOTOSEEKPATTERN);
+              if (idx > 0) {
+                seekPatternFound = true;
+              }
+            }
+            if (seekPatternFound) {
+              var idx = line.indexOf(GOOGLEPHOTOSEARCHPATTERN);
+              if (idx > 0) {
+                // if ((idx > 0) && (idx < 100)) {
+                idx += GOOGLEPHOTOSEARCHPATTERN.length;
+                var idx2 = line.indexOf("\"", idx);
+                var photoId = line.substring(idx, idx2);
+                if (DEBUGMODE) {
+                  console.log("idx: ", idx, "idx2: ", idx2, "line: ", line);
+                  console.log(photoId);
+                }
+
+                if (GOOGLEPHOTOLIST.indexOf(photoId) < 0) {
+                  GOOGLEPHOTOLIST.push(photoId);
+                }
+              }
+            }
+          });
+          res.destroy();
+
+          if (DEBUGMODE) {
+            console.log(GOOGLEPHOTOLIST);
+          }
+
+          downloadPhoto();
+        });
+      }
+    }).on('error', (e) => {
+      console.error(`HTTPS error: ${e.message}`);
+    });
   }
 
   // function for retrieving RSS feed display to OSD
@@ -138,13 +233,14 @@ PUREIMAGE.registerFont('font/FreeSansBold.ttf', 'FreeSansBold').load(() => {
       }
 
       // OpenCV face detect
-      CLASSIFIER1.detectMultiScaleAsync(IMG.bgrToGray(), (err, result1) => {
+      var grayImg = IMG.bgrToGray();
+      CLASSIFIER1.detectMultiScaleAsync(grayImg, (err, result1) => {
         if (DEBUGMODE) {
           console.log("result1:", result1);
           console.log("CLASSIFIER1 used:", Date.now() - start_time);
           start_time = Date.now();
         }
-        CLASSIFIER2.detectMultiScaleAsync(IMG.bgrToGray(), (err, result2) => {
+        CLASSIFIER2.detectMultiScaleAsync(grayImg, (err, result2) => {
           if (DEBUGMODE) {
             console.log("result2:", result2);
             console.log("CLASSIFIER2 used:", Date.now() - start_time);
@@ -309,9 +405,9 @@ PUREIMAGE.registerFont('font/FreeSansBold.ttf', 'FreeSansBold').load(() => {
           }
 
           // calculate 4 corners OSD range
-          const OSDHEIGHT = Math.round(Math.min(cropW, cropH) * 0.55);
+          const OSDHEIGHT = Math.round(Math.min(cropW, cropH) * 0.4);
           // console.log("OSDHEIGHT:", OSDHEIGHT);
-          const OSDWIDTH = Math.round(Math.min(cropW, cropH) * 0.65);
+          const OSDWIDTH = Math.round(Math.min(cropW, cropH) * 0.52);
           // console.log("OSDWIDTH:", OSDWIDTH);
           const UPPERLEFT = { top: dy + 1, bottom: dy + OSDHEIGHT, left: dx + 1, right: dx + OSDWIDTH }
           // console.log("UPPERLEFT:", UPPERLEFT);
@@ -355,27 +451,30 @@ PUREIMAGE.registerFont('font/FreeSansBold.ttf', 'FreeSansBold').load(() => {
               lr_overlap += overlap_area(LOWERRIGHT, rect) * certainty;
             });
           }
-          if (DEBUGMODE) {
-            console.log("ul_overlap:", ul_overlap, "ur_overlap:", ur_overlap, "ll_overlap:", ll_overlap, "lr_overlap:", lr_overlap);
-          }
 
           var min_overlap = Math.min(Math.min(ul_overlap, ur_overlap), Math.min(ll_overlap, lr_overlap));
-          var osd_x, osd_y;
+          var osdRect, osd_x, osd_y;
           if (ll_overlap == min_overlap) {
-            osd_x = Math.round(FONTSCALE * 50);
-            osd_y = outH - Math.round(FONTSCALE * 500);
-          } else if (lr_overlap == min_overlap) {
-            osd_x = outW - Math.round(FONTSCALE * 600);
-            osd_y = outH - Math.round(FONTSCALE * 500);
+            osdRect = LOWERLEFT;
+            osd_x = Math.round((osdRect.left - dx) * scale + (40 * FONTSCALE));
+            osd_y = Math.round((osdRect.top - dy) * scale - (10 * FONTSCALE));
+            } else if (lr_overlap == min_overlap) {
+            osdRect = LOWERRIGHT;
+            osd_x = Math.round((osdRect.left - dx) * scale);
+            osd_y = Math.round((osdRect.top - dy) * scale - (10 * FONTSCALE));
           } else if (ul_overlap == min_overlap) {
-            osd_x = Math.round(FONTSCALE * 50);
-            osd_y = Math.round(FONTSCALE * 50);
+            osdRect = UPPERLEFT;
+            osd_x = Math.round((osdRect.left - dx) * scale + (40 * FONTSCALE));
+            osd_y = Math.round((osdRect.top - dy) * scale + (20 * FONTSCALE));
           } else /* (ur_overlap == min_overlap) */ {
-            osd_x = outW - Math.round(FONTSCALE * 600);
-            osd_y = Math.round(FONTSCALE * 50);
+            osdRect = UPPERRIGHT;
+            osd_x = Math.round((osdRect.left - dx) * scale);
+            osd_y = Math.round((osdRect.top - dy) * scale + (20 * FONTSCALE));
           }
 
           if (DEBUGMODE) {
+            console.log("ul_overlap:", ul_overlap, "ur_overlap:", ur_overlap, "ll_overlap:", ll_overlap, "lr_overlap:", lr_overlap);
+            console.log("osd_x:", osd_x, "osd_y:", osd_y);
             console.log("determine OSD position used:", Date.now() - start_time);
             start_time = Date.now();
           }
@@ -437,6 +536,14 @@ PUREIMAGE.registerFont('font/FreeSansBold.ttf', 'FreeSansBold').load(() => {
               }
 
               if (DEBUGMODE) {
+                ctx.strokeStyle = 'green';
+                ctx.strokeRect(
+                  Math.round((osdRect.left - dx) * scale),
+                  Math.round((osdRect.top - dy) * scale),
+                  Math.round((osdRect.right - osdRect.left + 1) * scale),
+                  Math.round((osdRect.bottom - osdRect.top + 1) * scale)
+                );
+
                 if (result1) {
                   result1.objects.forEach((rect) => {
                     ctx.strokeStyle = 'red';
@@ -504,7 +611,8 @@ PUREIMAGE.registerFont('font/FreeSansBold.ttf', 'FreeSansBold').load(() => {
     } else if (req.url == "/") {
       res.setHeader('Content-Type', 'text/html');
       res.write(
-        `<html>
+        `
+<html>
 <head>
 <style type="text/css">body{margin:0;}</style>
 <script>
@@ -513,17 +621,28 @@ window.onload=function(){p();setInterval(p,60000);};
 </script>
 </head>
 <body><img id="photo"><body>
-</html>`);
+</html>
+`);
       res.end();
     } else {
       update_osd();
 
+
+
+      if (GOOGLEPHOTOURL && (GOOGLEPHOTOLIST.length == 0)) {
+        getGooglePhoto(GOOGLEPHOTOURL);
+      }
+
+
+
       FS.readdir(PHOTOPATH, function (err, files) {
-        var filename;
-        do {
-          filename = PHOTOPATH + files[Math.floor(Math.random() * files.length)];
-        } while (!filename.toUpperCase().endsWith(".JPG"))
-        photo_OSD_handler(filename, req, res);
+        if (files.length > 0) {
+          var filename;
+          do {
+            filename = PHOTOPATH + files[Math.floor(Math.random() * files.length)];
+          } while (!filename.toUpperCase().endsWith(".JPG"))
+          photo_OSD_handler(filename, req, res);
+        }
       });
     }
   }).listen(8080, (err) => {
