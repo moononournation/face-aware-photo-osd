@@ -8,28 +8,31 @@ const SHARP = require('sharp');
 const URL = require('url');
 
 const DEBUGMODE = (process.env.DEBUG == "Y");
+const OSD = process.env.OSD;
+const OSDUPDATEINTERVAL = (10 * 60 * 1000); // 10 minutes
 const GOOGLEPHOTOURL = process.env.GOOGLEPHOTO;
+const GOOGLEPHOTOUPDATEINTERVAL = (24 * 60 * 60 * 1000); // 1 day
 const GOOGLEPHOTOURLPREFIX = "https://lh3.googleusercontent.com/";
 const GOOGLEPHOTOSEEKPATTERN = "id=\"_ij\"";
 const GOOGLEPHOTOSEARCHPATTERN = "\",[\"" + GOOGLEPHOTOURLPREFIX;
-const GOOGLEPHOTOLIST = [];
+
+// photos directory
+const PHOTOPATH = "photo/";
 
 // OpenCV face detection classifier
+const CLASSIFIERSIZE = 1024;
 const CLASSIFIER1 = new CV.CascadeClassifier(CV.HAAR_EYE);
 // const CLASSIFIER1 = new CV.CascadeClassifier(CV.HAAR_FRONTALFACE_DEFAULT);
 // const CLASSIFIER1 = new CV.CascadeClassifier(CV.HAAR_FRONTALFACE_ALT);
 // const CLASSIFIER1 = new CV.CascadeClassifier(CV.HAAR_FRONTALFACE_ALT2);
 // const CLASSIFIER1 = new CV.CascadeClassifier(CV.HAAR_FRONTALFACE_ALT_TREE);
-
+const CLASSIFIER1WEIGHT = 0.01;
 // const CLASSIFIER2 = new CV.CascadeClassifier(CV.HAAR_EYE);
 // const CLASSIFIER2 = new CV.CascadeClassifier(CV.HAAR_FRONTALFACE_DEFAULT);
 // const CLASSIFIER2 = new CV.CascadeClassifier(CV.HAAR_FRONTALFACE_ALT);
 const CLASSIFIER2 = new CV.CascadeClassifier(CV.HAAR_FRONTALFACE_ALT2);
 // const CLASSIFIER2 = new CV.CascadeClassifier(CV.HAAR_FRONTALFACE_ALT_TREE);
-
-// photos directory
-const PHOTOPATH = "photo/";
-const OSDUPDATEINTERVAL = (10 * 60 * 1000); // 10 minutes
+const CLASSIFIER2WEIGHT = 0.99;
 
 // preload TTF font file
 PUREIMAGE.registerFont('font/FreeSansBold.ttf', 'FreeSansBold').load(() => {
@@ -62,16 +65,21 @@ PUREIMAGE.registerFont('font/FreeSansBold.ttf', 'FreeSansBold').load(() => {
     ctx.fillText(text, x, y);
   }
 
-  var downloadedPhoto = 0;
+  var google_photo_data = {
+    list: [],
+    downloaded: 0,
+    filelist: [],
+  }
   function downloadPhoto() {
-    if (downloadedPhoto < GOOGLEPHOTOLIST.length) {
-      var photoId = GOOGLEPHOTOLIST[downloadedPhoto];
+    if (google_photo_data.downloaded < google_photo_data.list.length) {
+      var photoId = google_photo_data.list[google_photo_data.downloaded];
       var filename = PHOTOPATH + "p" + photoId.substring(1, 20) + ".jpg";
       if (FS.existsSync(filename)) {
         if (DEBUGMODE) {
           console.log("Exists photo: ", filename);
         }
-        downloadedPhoto++;
+        google_photo_data.filelist.push(filename);
+        google_photo_data.downloaded++;
         downloadPhoto();
       } else {
         var file = FS.createWriteStream(filename);
@@ -79,18 +87,16 @@ PUREIMAGE.registerFont('font/FreeSansBold.ttf', 'FreeSansBold').load(() => {
           res.on('data', (chunk) => { file.write(chunk); });
           res.on('end', () => {
             file.close();
-            if (DEBUGMODE) {
-              console.log("Downloaded photo: ", filename);
-            }
-            downloadedPhoto++;
+
+            console.log("Downloaded photo: ", filename);
+            google_photo_data.filelist.push(filename);
+            google_photo_data.downloaded++;
             downloadPhoto();
           });
         });
       }
     } else {
-      if (DEBUGMODE) {
-        console.log("All Downloaded: ", GOOGLEPHOTOLIST.length);
-      }
+      console.log("All Downloaded: ", google_photo_data.list.length);
     }
   }
 
@@ -109,9 +115,10 @@ PUREIMAGE.registerFont('font/FreeSansBold.ttf', 'FreeSansBold').load(() => {
         let rawData = '';
         res.on('data', (chunk) => { rawData += chunk; });
         res.on('end', () => {
-          googlePhotoList = rawData;
           lines = rawData.split('\n');
           var seekPatternFound = false;
+          google_photo_data.list = [];
+
           lines.forEach((line) => {
             if (!seekPatternFound) {
               var idx = line.indexOf(GOOGLEPHOTOSEEKPATTERN);
@@ -126,23 +133,23 @@ PUREIMAGE.registerFont('font/FreeSansBold.ttf', 'FreeSansBold').load(() => {
                 idx += GOOGLEPHOTOSEARCHPATTERN.length;
                 var idx2 = line.indexOf("\"", idx);
                 var photoId = line.substring(idx, idx2);
-                if (DEBUGMODE) {
-                  console.log("idx: ", idx, "idx2: ", idx2, "line: ", line);
-                  console.log(photoId);
-                }
+                // console.log("idx: ", idx, "idx2: ", idx2, "line: ", line);
+                // console.log(photoId);
 
-                if (GOOGLEPHOTOLIST.indexOf(photoId) < 0) {
-                  GOOGLEPHOTOLIST.push(photoId);
+                if (google_photo_data.list.indexOf(photoId) < 0) {
+                  google_photo_data.list.push(photoId);
                 }
               }
             }
           });
+          google_photo_data.last_update = Date.now();
           res.destroy();
 
           if (DEBUGMODE) {
-            console.log(GOOGLEPHOTOLIST);
+            console.log(google_photo_data.list);
           }
 
+          google_photo_data.filelist = [];
           downloadPhoto();
         });
       }
@@ -151,13 +158,21 @@ PUREIMAGE.registerFont('font/FreeSansBold.ttf', 'FreeSansBold').load(() => {
     });
   }
 
+  function update_google_photo() {
+    if (GOOGLEPHOTOURL) {
+      if ((google_photo_data.list.length == 0) || ((Date.now() - google_photo_data.last_update) > GOOGLEPHOTOUPDATEINTERVAL)) {
+        getGooglePhoto(GOOGLEPHOTOURL);
+      }
+    }
+  }
+
   // function for retrieving RSS feed display to OSD
-  var osd_data;
+  var osd_data, osd_icon;
   function update_osd() {
     if ((!osd_data) || ((Date.now() - osd_data.last_update) > OSDUPDATEINTERVAL)) {
 
       // You map change following script to your selected RSS feed
-      if (process.env.OSD == "HK_Weather") {
+      if (OSD == "HK_Weather") {
         // Begin: get HK weather
         HTTP.get('http://rss.weather.gov.hk/rss/CurrentWeather.xml', (resp) => {
           let rssData = '';
@@ -195,6 +210,15 @@ PUREIMAGE.registerFont('font/FreeSansBold.ttf', 'FreeSansBold').load(() => {
             if (DEBUGMODE) {
               console.log("osd_data:", osd_data);
             }
+
+            HTTPS.get(osd_data.image, (res) => {
+              PUREIMAGE.decodePNGFromStream(res).then((img) => {
+                if (DEBUGMODE) {
+                  console.log("OSD icon size is", img.width, img.height);
+                }
+                osd_icon = img;
+              });
+            });
           });
 
         }).on("error", (err) => {
@@ -233,14 +257,45 @@ PUREIMAGE.registerFont('font/FreeSansBold.ttf', 'FreeSansBold').load(() => {
       }
 
       // OpenCV face detect
-      var grayImg = IMG.bgrToGray();
+      var cvWidth, cvHeight, cvScale;
+      if (W > H) {
+        cvWidth = CLASSIFIERSIZE;
+        cvScale = cvWidth / W;
+        cvHeight = Math.round(H * cvScale);
+      } else {
+        cvHeight = CLASSIFIERSIZE;
+        cvScale = cvHeight / H;
+        cvWidth = Math.round(W * cvScale);
+      }
+      if (DEBUGMODE) {
+        console.log("cvWidth:", cvWidth, "cvHeight:", cvHeight, "cvScale:", cvScale);
+      }
+      var grayImg = IMG.resize(cvHeight, cvWidth).bgrToGray();
       CLASSIFIER1.detectMultiScaleAsync(grayImg, (err, result1) => {
+        if (result1) {
+          for (var i = 0; i < result1.objects.length; ++i) {
+            result1.objects[i] = new CV.Rect(
+              Math.round(result1.objects[i].x / cvScale),
+              Math.round(result1.objects[i].y / cvScale),
+              Math.round(result1.objects[i].width / cvScale),
+              Math.round(result1.objects[i].height / cvScale));
+          }
+        }
         if (DEBUGMODE) {
           console.log("result1:", result1);
           console.log("CLASSIFIER1 used:", Date.now() - start_time);
           start_time = Date.now();
         }
         CLASSIFIER2.detectMultiScaleAsync(grayImg, (err, result2) => {
+          if (result2) {
+            for (var i = 0; i < result2.objects.length; ++i) {
+              result2.objects[i] = new CV.Rect(
+                Math.round(result2.objects[i].x / cvScale),
+                Math.round(result2.objects[i].y / cvScale),
+                Math.round(result2.objects[i].width / cvScale),
+                Math.round(result2.objects[i].height / cvScale));
+            }
+          }
           if (DEBUGMODE) {
             console.log("result2:", result2);
             console.log("CLASSIFIER2 used:", Date.now() - start_time);
@@ -255,7 +310,6 @@ PUREIMAGE.registerFont('font/FreeSansBold.ttf', 'FreeSansBold').load(() => {
           if (URLPARSE.query) {
             if (URLPARSE.query.w) {
               outW = parseInt(URLPARSE.query.w);
-              scale = outW / W;
               if (URLPARSE.query.h) {
                 outH = parseInt(URLPARSE.query.h);
                 if ((outW / outH) > (W / H)) {
@@ -296,7 +350,7 @@ PUREIMAGE.registerFont('font/FreeSansBold.ttf', 'FreeSansBold').load(() => {
                         // console.log("BOTTOMCROPBORDER:", BOTTOMCROPBORDER);
                         if (result1) {
                           result1.objects.forEach((rect) => {
-                            certainty = result1.numDetections[++i];
+                            certainty = result1.numDetections[++i] * CLASSIFIER1WEIGHT;
                             tcb_overlap += overlap_area(TOPCROPBORDER, rect) * certainty;
                             bcb_overlap += overlap_area(BOTTOMCROPBORDER, rect) * certainty;
                           });
@@ -304,7 +358,7 @@ PUREIMAGE.registerFont('font/FreeSansBold.ttf', 'FreeSansBold').load(() => {
                         if (result2) {
                           i = -1;
                           result2.objects.forEach((rect) => {
-                            certainty = result2.numDetections[++i] * 10;
+                            certainty = result2.numDetections[++i] * CLASSIFIER2WEIGHT;
                             tcb_overlap += overlap_area(TOPCROPBORDER, rect) * certainty;
                             bcb_overlap += overlap_area(BOTTOMCROPBORDER, rect) * certainty;
                           });
@@ -362,7 +416,7 @@ PUREIMAGE.registerFont('font/FreeSansBold.ttf', 'FreeSansBold').load(() => {
                         // console.log("RIGHTCROPBORDER:", RIGHTCROPBORDER);
                         if (result1) {
                           result1.objects.forEach((rect) => {
-                            certainty = result1.numDetections[++i];
+                            certainty = result1.numDetections[++i] * CLASSIFIER1WEIGHT;
                             lcb_overlap += overlap_area(LEFTCROPBORDER, rect) * certainty;
                             rcb_overlap += overlap_area(RIGHTCROPBORDER, rect) * certainty;
                           });
@@ -370,7 +424,7 @@ PUREIMAGE.registerFont('font/FreeSansBold.ttf', 'FreeSansBold').load(() => {
                         if (result2) {
                           i = -1;
                           result2.objects.forEach((rect) => {
-                            certainty = result2.numDetections[++i] * 10;
+                            certainty = result2.numDetections[++i] * CLASSIFIER2WEIGHT;
                             lcb_overlap += overlap_area(LEFTCROPBORDER, rect) * certainty;
                             rcb_overlap += overlap_area(RIGHTCROPBORDER, rect) * certainty;
                           });
@@ -399,27 +453,29 @@ PUREIMAGE.registerFont('font/FreeSansBold.ttf', 'FreeSansBold').load(() => {
               }
             } else if (URLPARSE.query.h) {
               outH = parseInt(URLPARSE.query.h);
-              scale = outH / H;
               outW = Math.round(W * scale);
             }
           }
+          scale = outW / cropW;
+          if (DEBUGMODE) {
+            console.log("scale:", scale);
+          }
 
           // calculate 4 corners OSD range
-          const OSDHEIGHT = Math.round(Math.min(cropW, cropH) * 0.4);
-          // console.log("OSDHEIGHT:", OSDHEIGHT);
-          const OSDWIDTH = Math.round(Math.min(cropW, cropH) * 0.52);
-          // console.log("OSDWIDTH:", OSDWIDTH);
-          const UPPERLEFT = { top: dy + 1, bottom: dy + OSDHEIGHT, left: dx + 1, right: dx + OSDWIDTH }
+          const OSDWIDTH = Math.round(Math.min(cropW, cropH) * 0.58);
+          const OSDHEIGHT = Math.round(OSDWIDTH * 0.72);
+          // console.log("OSDWIDTH:", OSDWIDTH, "OSDHEIGHT:", OSDHEIGHT);
+          const UPPERLEFT = { top: dy, bottom: dy + OSDHEIGHT - 1, left: dx, right: dx + OSDWIDTH - 1 }
           // console.log("UPPERLEFT:", UPPERLEFT);
-          const UPPERRIGHT = { top: dy + 1, bottom: dy + OSDHEIGHT, left: dx + cropW - OSDWIDTH + 1, right: dx + cropW }
+          const UPPERRIGHT = { top: dy, bottom: dy + OSDHEIGHT - 1, left: dx + cropW - OSDWIDTH, right: dx + cropW - 1 }
           // console.log("UPPERRIGHT:", UPPERRIGHT);
-          const LOWERLEFT = { top: dy + cropH - OSDHEIGHT + 1, bottom: dy + cropH, left: dx + 1, right: dx + OSDWIDTH }
+          const LOWERLEFT = { top: dy + cropH - OSDHEIGHT, bottom: dy + cropH - 1, left: dx, right: dx + OSDWIDTH - 1 }
           // console.log("LOWERLEFT:", LOWERLEFT);
-          const LOWERRIGHT = { top: dy + cropH - OSDHEIGHT + 1, bottom: dy + cropH, left: dx + cropW - OSDWIDTH + 1, right: dx + cropW }
+          const LOWERRIGHT = { top: dy + cropH - OSDHEIGHT, bottom: dy + cropH - 1, left: dx + cropW - OSDWIDTH, right: dx + cropW - 1 }
           // console.log("LOWERRIGHT:", LOWERRIGHT);
 
           // determine font scale
-          const FONTSCALE = Math.min(outW, outH) / 1200;
+          const FONTSCALE = OSDWIDTH * scale / 100;
           if (DEBUGMODE) {
             console.log("FONTSCALE:", FONTSCALE);
           }
@@ -434,7 +490,7 @@ PUREIMAGE.registerFont('font/FreeSansBold.ttf', 'FreeSansBold').load(() => {
 
           if (result1) {
             result1.objects.forEach((rect) => {
-              certainty = result1.numDetections[++i];
+              certainty = result1.numDetections[++i] * CLASSIFIER1WEIGHT;
               ul_overlap += overlap_area(UPPERLEFT, rect) * certainty;
               ur_overlap += overlap_area(UPPERRIGHT, rect) * certainty;
               ll_overlap += overlap_area(LOWERLEFT, rect) * certainty;
@@ -444,7 +500,7 @@ PUREIMAGE.registerFont('font/FreeSansBold.ttf', 'FreeSansBold').load(() => {
           if (result2) {
             i = -1;
             result2.objects.forEach((rect) => {
-              certainty = result2.numDetections[++i] * 10;
+              certainty = result2.numDetections[++i] * CLASSIFIER2WEIGHT;
               ul_overlap += overlap_area(UPPERLEFT, rect) * certainty;
               ur_overlap += overlap_area(UPPERRIGHT, rect) * certainty;
               ll_overlap += overlap_area(LOWERLEFT, rect) * certainty;
@@ -453,28 +509,23 @@ PUREIMAGE.registerFont('font/FreeSansBold.ttf', 'FreeSansBold').load(() => {
           }
 
           var min_overlap = Math.min(Math.min(ul_overlap, ur_overlap), Math.min(ll_overlap, lr_overlap));
-          var osdRect, osd_x, osd_y;
+          var osdRect, osd_mid_x, osd_y;
           if (ll_overlap == min_overlap) {
             osdRect = LOWERLEFT;
-            osd_x = Math.round((osdRect.left - dx) * scale + (40 * FONTSCALE));
-            osd_y = Math.round((osdRect.top - dy) * scale - (10 * FONTSCALE));
-            } else if (lr_overlap == min_overlap) {
+          } else if (lr_overlap == min_overlap) {
             osdRect = LOWERRIGHT;
-            osd_x = Math.round((osdRect.left - dx) * scale);
-            osd_y = Math.round((osdRect.top - dy) * scale - (10 * FONTSCALE));
           } else if (ul_overlap == min_overlap) {
             osdRect = UPPERLEFT;
-            osd_x = Math.round((osdRect.left - dx) * scale + (40 * FONTSCALE));
-            osd_y = Math.round((osdRect.top - dy) * scale + (20 * FONTSCALE));
           } else /* (ur_overlap == min_overlap) */ {
             osdRect = UPPERRIGHT;
-            osd_x = Math.round((osdRect.left - dx) * scale);
-            osd_y = Math.round((osdRect.top - dy) * scale + (20 * FONTSCALE));
           }
+          osd_mid_x = Math.round((((osdRect.left + osdRect.right) / 2) - dx) * scale);
+          osd_y = Math.round((osdRect.top - dy) * scale);
 
           if (DEBUGMODE) {
             console.log("ul_overlap:", ul_overlap, "ur_overlap:", ur_overlap, "ll_overlap:", ll_overlap, "lr_overlap:", lr_overlap);
-            console.log("osd_x:", osd_x, "osd_y:", osd_y);
+            console.log("osdRect:", osdRect);
+            console.log("osd_mid_x:", osd_mid_x, "osd_y:", osd_y);
             console.log("determine OSD position used:", Date.now() - start_time);
             start_time = Date.now();
           }
@@ -484,119 +535,140 @@ PUREIMAGE.registerFont('font/FreeSansBold.ttf', 'FreeSansBold').load(() => {
             .resize(outW, outH)
             .raw()
             .toBuffer(function (err, buf, info) {
-              if (DEBUGMODE) {
-                console.log("resize used:", Date.now() - start_time);
-                start_time = Date.now();
-              }
-
-              // copy image buffer to pureimage context
-              var img = PUREIMAGE.make(outW, outH);
-              var n = -1, o = -1;
-              for (var y = 0; y < outH; ++y) {
-                for (var x = 0; x < outW; ++x) {
-                  img.data[++o] = buf[++n]; // R
-                  img.data[++o] = buf[++n]; // G
-                  img.data[++o] = buf[++n]; // B
-                  img.data[++o] = 255; // A
+              if (err) {
+                console.error(err);
+              } else {
+                if (DEBUGMODE) {
+                  console.log("resize used:", Date.now() - start_time);
+                  start_time = Date.now();
                 }
-              }
-              var ctx = img.getContext('2d');
-              if (DEBUGMODE) {
-                console.log("getContext used:", Date.now() - start_time);
-                start_time = Date.now();
-              }
 
-              const TEXT1 = MOMENT().format('HH:mm');
-              const TEXT2 = MOMENT().format('MMM DD, ddd');
+                // copy image buffer to pureimage context
+                var img = PUREIMAGE.make(outW, outH);
+                var n = -1, o = -1;
+                for (var y = 0; y < outH; ++y) {
+                  for (var x = 0; x < outW; ++x) {
+                    img.data[++o] = buf[++n]; // R
+                    img.data[++o] = buf[++n]; // G
+                    img.data[++o] = buf[++n]; // B
+                    img.data[++o] = 255; // A
+                  }
+                }
+                var ctx = img.getContext('2d');
+                if (DEBUGMODE) {
+                  console.log("getContext used:", Date.now() - start_time);
+                  start_time = Date.now();
+                }
 
-              // draw OSD
-              ctx.font = (FONTSCALE * 232) + "pt 'FreeSansBold'";
-              var size = ctx.measureText(TEXT1);
-              // console.log("size:", size);
-              osd_y += Math.round(size.emHeightAscent);
-              draw_text_with_border(ctx, TEXT1, osd_x, osd_y, "#ffffff");
-              osd_y += Math.round(FONTSCALE * 10);
-              ctx.font = (FONTSCALE * 96) + "pt 'FreeSansBold'";
-              size = ctx.measureText(TEXT2);
-              // console.log("size:", size);
-              osd_y += Math.round(size.emHeightAscent);
-              draw_text_with_border(ctx, TEXT2, osd_x, osd_y, "#ffffff");
-              if (osd_data) {
-                var text3 = osd_data.text;
-                osd_y += Math.round(FONTSCALE * 30);
-                ctx.font = (FONTSCALE * 120) + "pt 'FreeSansBold'";
-                size = ctx.measureText(text3);
+                if (DEBUGMODE) {
+                  if (result1) {
+                    result1.objects.forEach((rect) => {
+                      ctx.strokeStyle = 'red';
+                      ctx.strokeRect(
+                        Math.round((rect.x - dx) * scale),
+                        Math.round((rect.y - dy) * scale),
+                        Math.round(rect.width * scale),
+                        Math.round(rect.height * scale)
+                      );
+                    });
+                  }
+
+                  if (result2) {
+                    result2.objects.forEach((rect) => {
+                      ctx.strokeStyle = 'white';
+                      ctx.strokeRect(
+                        Math.round((rect.x - dx) * scale),
+                        Math.round((rect.y - dy) * scale),
+                        Math.round(rect.width * scale),
+                        Math.round(rect.height * scale)
+                      );
+                    });
+                  }
+                }
+
+                const TEXT1 = MOMENT().format('HH:mm');
+                const TEXT2 = MOMENT().format('MMM DD, ddd');
+
+                // draw OSD
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.25)';
+                var osdMargin = Math.round(FONTSCALE * 3);
+                ctx.fillRect(
+                  Math.round((osdRect.left - dx) * scale) + osdMargin,
+                  Math.round((osdRect.top - dy) * scale) + osdMargin,
+                  Math.round((osdRect.right - osdRect.left + 1) * scale) - (osdMargin * 2),
+                  Math.round((osdRect.bottom - osdRect.top + 1) * scale) - (osdMargin * 2)
+                );
+                ctx.font = (FONTSCALE * 36) + "pt 'FreeSansBold'";
+                var size = ctx.measureText(TEXT1);
                 // console.log("size:", size);
                 osd_y += Math.round(size.emHeightAscent);
-                draw_text_with_border(ctx, text3, osd_x, osd_y, "#ffffff");
-              }
-              if (DEBUGMODE) {
-                console.log("draw OSD used:", Date.now() - start_time);
-                start_time = Date.now();
-              }
-
-              if (DEBUGMODE) {
-                ctx.strokeStyle = 'green';
-                ctx.strokeRect(
-                  Math.round((osdRect.left - dx) * scale),
-                  Math.round((osdRect.top - dy) * scale),
-                  Math.round((osdRect.right - osdRect.left + 1) * scale),
-                  Math.round((osdRect.bottom - osdRect.top + 1) * scale)
-                );
-
-                if (result1) {
-                  result1.objects.forEach((rect) => {
-                    ctx.strokeStyle = 'red';
-                    ctx.strokeRect(
-                      Math.round((rect.x - dx) * scale),
-                      Math.round((rect.y - dy) * scale),
-                      Math.round(rect.width * scale),
-                      Math.round(rect.height * scale)
+                var osd_x = osd_mid_x - Math.round(size.width / 2);
+                draw_text_with_border(ctx, TEXT1, osd_x, osd_y, "#ffffff");
+                osd_y += Math.round(FONTSCALE * 6);
+                ctx.font = (FONTSCALE * 10) + "pt 'FreeSansBold'";
+                size = ctx.measureText(TEXT2);
+                // console.log("size:", size);
+                osd_y += Math.round(size.emHeightAscent);
+                draw_text_with_border(ctx, TEXT2, osd_x, osd_y, "#ffffff");
+                if (osd_data) {
+                  if (osd_icon) {
+                    ctx.drawImage(osd_icon,
+                      0, 0, osd_icon.width, osd_icon.height, // source dimensions
+                      // destination dimensions
+                      Math.round(((osdRect.right - dx) * scale) - (FONTSCALE * 34)),
+                      Math.round(((osdRect.bottom - dy) * scale) - (FONTSCALE * 34)),
+                      Math.round(FONTSCALE * 28),
+                      Math.round(FONTSCALE * 28)
                     );
-                  });
-                }
-
-                if (result2) {
-                  result2.objects.forEach((rect) => {
-                    ctx.strokeStyle = 'white';
-                    ctx.strokeRect(
-                      Math.round((rect.x - dx) * scale),
-                      Math.round((rect.y - dy) * scale),
-                      Math.round(rect.width * scale),
-                      Math.round(rect.height * scale)
-                    );
-                  });
-                }
-              }
-
-              // encode to JPEG and write to HTTP response
-              SHARP(img.data,
-                {
-                  raw: {
-                    width: outW,
-                    height: outH,
-                    channels: 4
                   }
-                })
-                .jpeg({
-                  quality: 94,
-                  // chromaSubsampling: '4:4:4'
-                })
-                .toBuffer()
-                .then(data => {
+
+                  var text3 = osd_data.text;
+                  osd_y += Math.round(FONTSCALE * 6);
+                  ctx.font = (FONTSCALE * 12) + "pt 'FreeSansBold'";
+                  size = ctx.measureText(text3);
+                  // console.log("size:", size);
+                  osd_y += Math.round(size.emHeightAscent);
+                  draw_text_with_border(ctx, text3, osd_x, osd_y, "#ffffff");
+
                   if (DEBUGMODE) {
-                    console.log("encode to JPEG used:", Date.now() - start_time);
+                    console.log("draw OSD used:", Date.now() - start_time);
                     start_time = Date.now();
                   }
+                }
 
-                  res.setHeader('Content-Type', 'image/jpeg');
-                  res.setHeader('Content-Length', data.length);
-                  res.write(data);
-                  res.end();
-                  if (DEBUGMODE) {
-                    console.log("write to HTTP response used:", Date.now() - start_time);
-                  }
-                });
+                // encode to JPEG and write to HTTP response
+                SHARP(img.data,
+                  {
+                    raw: {
+                      width: outW,
+                      height: outH,
+                      channels: 4,
+                    }
+                  })
+                  .modulate({
+                    brightness: 1.05,
+                    saturation: 1.25,
+                  })
+                  .jpeg({
+                    quality: 94,
+                    // chromaSubsampling: '4:4:4',
+                  })
+                  .toBuffer()
+                  .then(data => {
+                    if (DEBUGMODE) {
+                      console.log("encode to JPEG used:", Date.now() - start_time);
+                      start_time = Date.now();
+                    }
+
+                    res.setHeader('Content-Type', 'image/jpeg');
+                    res.setHeader('Content-Length', data.length);
+                    res.write(data);
+                    res.end();
+                    if (DEBUGMODE) {
+                      console.log("write to HTTP response used:", Date.now() - start_time);
+                    }
+                  });
+              }
             });
         });
       });
@@ -625,25 +697,34 @@ window.onload=function(){p();setInterval(p,60000);};
 `);
       res.end();
     } else {
-      update_osd();
-
-
-
-      if (GOOGLEPHOTOURL && (GOOGLEPHOTOLIST.length == 0)) {
-        getGooglePhoto(GOOGLEPHOTOURL);
+      if (OSD) {
+        update_osd();
       }
 
+      if (GOOGLEPHOTOURL) {
+        update_google_photo();
+      }
 
-
-      FS.readdir(PHOTOPATH, function (err, files) {
-        if (files.length > 0) {
-          var filename;
-          do {
-            filename = PHOTOPATH + files[Math.floor(Math.random() * files.length)];
-          } while (!filename.toUpperCase().endsWith(".JPG"))
-          photo_OSD_handler(filename, req, res);
+      if (google_photo_data.filelist.length > 0) {
+        var filename = google_photo_data.filelist[Math.floor(Math.random() * google_photo_data.filelist.length)];
+        if (DEBUGMODE) {
+          console.log("Google random photo: ", filename);
         }
-      });
+        photo_OSD_handler(filename, req, res);
+      } else {
+        FS.readdir(PHOTOPATH, function (err, files) {
+          if (files.length > 0) {
+            var filename;
+            do {
+              filename = PHOTOPATH + files[Math.floor(Math.random() * files.length)];
+            } while (!filename.toUpperCase().endsWith(".JPG"))
+            if (DEBUGMODE) {
+              console.log("Folder random photo: ", filename);
+            }
+            photo_OSD_handler(filename, req, res);
+          }
+        });
+      }
     }
   }).listen(8080, (err) => {
     if (err) {

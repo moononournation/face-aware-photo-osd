@@ -1,8 +1,8 @@
 # build command
-#docker build -f Dockerfile_dev_version -t face-aware-photo-osd:1.0.1 .
+#docker build -f Dockerfile_dev_version -t face-aware-photo-osd:1.0.2 .
 
 # run command
-#docker run -it -p 8080:8080 -e TZ=Asia/Hong_Kong -e OSD=HK_Weather -v ~/photo:/app/photo -v ~/git/face-aware-photo-osd/app.js:/app/app.js face-aware-photo-osd:1.0.1
+#docker run -it -p 8080:8080 -e TZ=Asia/Hong_Kong -e OSD=HK_Weather -v ~/photo:/app/photo -v ~/git/face-aware-photo-osd/app.js:/app/app.js face-aware-photo-osd:1.0.2
 
 FROM node:10-buster-slim
 
@@ -24,6 +24,9 @@ RUN apt-get install -y --no-install-recommends \
 COPY package*.json ./
 
 RUN npm install --save opencv4nodejs@latest
+RUN npm install --save moment@latest
+RUN npm install --save pureimage@latest
+RUN npm install --save sharp@latest
 
 RUN npm install
 

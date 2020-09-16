@@ -1,6 +1,6 @@
 {
   "name": "face-aware-photo-osd",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "App for face aware photo frame",
   "main": "app.js",
   "scripts": {
@@ -9,9 +9,9 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "opencv4nodejs": "^5.5.0",
-    "moment": "^2.24.0",
-    "pureimage": "^0.1.6",
-    "sharp": "^0.24.1"
+    "moment": "^2.28.0",
+    "opencv4nodejs": "^5.6.0",
+    "pureimage": "^0.2.5",
+    "sharp": "^0.26.0"
   }
 }
