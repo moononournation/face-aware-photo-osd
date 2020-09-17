@@ -150,6 +150,7 @@ PUREIMAGE.registerFont('font/FreeSansBold.ttf', 'FreeSansBold').load(() => {
           }
 
           google_photo_data.filelist = [];
+          google_photo_data.downloaded = 0;
           downloadPhoto();
         });
       }
