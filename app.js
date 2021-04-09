@@ -9,7 +9,7 @@ const URL = require('url');
 
 const DEBUGMODE = (process.env.DEBUG == "Y");
 const OSD = process.env.OSD;
-const OSDUPDATEINTERVAL = (10 * 60 * 1000); // 10 minutes
+const OSDUPDATEINTERVAL = (30 * 60 * 1000); // 30 minutes
 const GOOGLEPHOTOURL = process.env.GOOGLEPHOTO;
 const GOOGLEPHOTOUPDATEINTERVAL = (24 * 60 * 60 * 1000); // 1 day
 const GOOGLEPHOTOURLPREFIX = "https://lh3.googleusercontent.com/";
@@ -591,7 +591,7 @@ PUREIMAGE.registerFont('font/FreeSansBold.ttf', 'FreeSansBold').load(() => {
                 const TEXT2 = MOMENT().format('MMM DD, ddd');
 
                 // draw OSD
-                ctx.fillStyle = 'rgba(0, 0, 0, 0.25)';
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
                 var osdMargin = Math.round(FONTSCALE * 3);
                 ctx.fillRect(
                   Math.round((osdRect.left - dx) * scale) + osdMargin,
@@ -683,8 +683,7 @@ PUREIMAGE.registerFont('font/FreeSansBold.ttf', 'FreeSansBold').load(() => {
       res.end();
     } else if (req.url == "/") {
       res.setHeader('Content-Type', 'text/html');
-      res.write(
-        `
+      res.write(`
 <html>
 <head>
 <style type="text/css">body{margin:0;}</style>
